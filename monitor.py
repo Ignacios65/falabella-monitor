@@ -119,19 +119,27 @@ def marcar_alertado(con, clave):
 def ensure_chromium():
     """Instala Chromium automaticamente si no esta disponible (necesario en Railway)."""
     import subprocess
-    try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as pw:
-            path = pw.chromium.executable_path
-            if not os.path.exists(path):
-                raise FileNotFoundError
-    except Exception:
-        print("Chromium no encontrado, instalando automaticamente...")
+    chromium_path = os.path.expanduser("~/.cache/ms-playwright")
+    alt_path = "/ms-playwright"
+    path = chromium_path if os.path.exists(chromium_path) else alt_path
+    # busca si ya hay algun ejecutable de chromium
+    found = False
+    for root, dirs, files in os.walk(path):
+        for f in files:
+            if "chrome" in f.lower() or "chromium" in f.lower():
+                found = True
+                break
+        if found:
+            break
+    if not found:
+        print("Chromium no encontrado, instalando...")
         subprocess.run(
             [sys.executable, "-m", "playwright", "install", "chromium"],
             check=True
         )
         print("Chromium instalado OK")
+    else:
+        print("Chromium ya instalado, continuando...")
 
 
 def fetch_payloads(url, timeout_ms=45000, headless=True):
