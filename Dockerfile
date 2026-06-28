@@ -1,6 +1,5 @@
 FROM python:3.12-slim
 
-# Dependencias del sistema para Chromium
 RUN apt-get update && apt-get install -y \
     wget curl gnupg \
     libglib2.0-0 libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
@@ -16,6 +15,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN python -m playwright install chromium
 
 COPY monitor.py .
-COPY config.example.json ./config.json
 
 CMD ["python", "monitor.py"]

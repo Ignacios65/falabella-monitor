@@ -23,17 +23,34 @@ CONFIG_PATH = os.environ.get("FALABELLA_CONFIG", "config.json")
 
 
 def load_config():
-    if not os.path.exists(CONFIG_PATH):
-        sys.exit(f"No encuentro {CONFIG_PATH}. Copia config.example.json a config.json y edítalo.")
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        cfg = json.load(f)
+    # Si existe config.json lo carga, si no construye la config desde variables de entorno
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            cfg = json.load(f)
+    else:
+        cfg = {}
 
+    # Variables de entorno tienen prioridad sobre el archivo
     cfg["ntfy_tema"] = os.environ.get("NTFY_TEMA", cfg.get("ntfy_tema", ""))
 
+    # URLs desde variable de entorno (separadas por coma) o desde el archivo
+    urls_env = os.environ.get("URLS", "")
+    if urls_env:
+        cfg["urls"] = [u.strip() for u in urls_env.split(",") if u.strip()]
+
+    # Valores por defecto para el resto de opciones
+    cfg.setdefault("intervalo_minutos", int(os.environ.get("INTERVALO_MINUTOS", 30)))
+    cfg.setdefault("umbral_descuento", float(os.environ.get("UMBRAL_DESCUENTO", 0.80)))
+    cfg.setdefault("umbral_caida", float(os.environ.get("UMBRAL_CAIDA", 0.60)))
+    cfg.setdefault("precio_minimo_clp", int(os.environ.get("PRECIO_MINIMO_CLP", 1000)))
+    cfg.setdefault("min_muestras", int(os.environ.get("MIN_MUESTRAS", 5)))
+    cfg.setdefault("pausa_entre_urls_seg", int(os.environ.get("PAUSA_ENTRE_URLS_SEG", 5)))
+    cfg.setdefault("headless", True)
+
     if not cfg.get("ntfy_tema") or "PEGA_AQUI" in cfg["ntfy_tema"]:
-        sys.exit("Falta el tema de ntfy. Edita config.json y pon tu tema en 'ntfy_tema'.")
+        sys.exit("Falta el tema de ntfy. Configura la variable de entorno NTFY_TEMA.")
     if not cfg.get("urls"):
-        sys.exit("No hay URLs para monitorear en config.json (campo 'urls').")
+        sys.exit("No hay URLs para monitorear. Configura la variable de entorno URLS.")
     return cfg
 
 
