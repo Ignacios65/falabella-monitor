@@ -116,11 +116,30 @@ def marcar_alertado(con, clave):
 #  OBTENCIÓN DE DATOS (Playwright intercepta el JSON de la web)
 # ------------------------------------------------------------------ #
 
+def ensure_chromium():
+    """Instala Chromium automaticamente si no esta disponible (necesario en Railway)."""
+    import subprocess
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            path = pw.chromium.executable_path
+            if not os.path.exists(path):
+                raise FileNotFoundError
+    except Exception:
+        print("Chromium no encontrado, instalando automaticamente...")
+        subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            check=True
+        )
+        print("Chromium instalado OK")
+
+
 def fetch_payloads(url, timeout_ms=45000, headless=True):
+    ensure_chromium()
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        sys.exit("Falta Playwright. Ejecuta: python -m pip install playwright && python -m playwright install chromium")
+        sys.exit("Falta Playwright.")
 
     payloads = []
 
