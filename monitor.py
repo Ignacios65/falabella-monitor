@@ -190,6 +190,27 @@ def fetch_payloads(url, timeout_ms=45000, headless=True):
         except Exception:
             pass
 
+        # Plan C: extraer productos del DOM (para tiendas que renderizan en HTML)
+        try:
+            dom_products = page.evaluate("""() => {
+                const results = [];
+                const links = document.querySelectorAll('a[href]');
+                for (const a of links) {
+                    const text = a.textContent || '';
+                    if (!text.includes('$') || text.length > 600 || text.length < 20) continue;
+                    const priceMatches = text.match(/\\$[\\d.,]+/g);
+                    if (!priceMatches || priceMatches.length === 0) continue;
+                    const href = a.href || '';
+                    if (!href.includes('.cl/') && !href.includes('.com/')) continue;
+                    results.push({href: href, text: text});
+                }
+                return results;
+            }""")
+            if dom_products:
+                payloads.append({"_dom_products": dom_products})
+        except Exception:
+            pass
+
         browser.close()
     return payloads
 
@@ -239,9 +260,53 @@ def first_key(d, keys):
     return None
 
 
+def parsear_dom_product(item):
+    text = item.get("text", "")
+    href = item.get("href", "")
+    precios_raw = re.findall(r"\$\d{1,3}(?:\.\d{3})+", text)
+    if not precios_raw:
+        return None
+    precios = []
+    for p in precios_raw:
+        digitos = re.sub(r"[^\d]", "", p)
+        if digitos:
+            precios.append(int(digitos))
+    precios = [p for p in precios if p >= 1000]
+    if not precios:
+        return None
+    for pat in precios_raw:
+        text = text.replace(pat, " ")
+    nombre = re.sub(r"\s+", " ", text).strip()
+    for basura in ("Vista Previa", "Agregar al carro", "Despacho Gratis",
+                   "Retiro en tienda", "Ver producto", "Añadir", "Agregar",
+                   "cuotas sin interés", "6 cuotas sin interés"):
+        nombre = nombre.replace(basura, "")
+    nombre = re.sub(r"\d+%", "", nombre)
+    nombre = re.sub(r"\(\d+\)", "", nombre)
+    nombre = re.sub(r"\s+", " ", nombre).strip()
+    if len(nombre) < 5:
+        return None
+    sku = re.sub(r"[^\w]", "", href.split("/")[-1])[:60] or nombre
+    return {
+        "sku": sku,
+        "nombre": nombre[:120],
+        "precio": min(precios),
+        "normal": max(precios),
+        "url": href,
+    }
+
+
 def extraer_productos(obj, encontrados=None, vistos=None):
     if encontrados is None:
         encontrados, vistos = [], set()
+
+    if isinstance(obj, dict) and "_dom_products" in obj:
+        for item in obj["_dom_products"]:
+            prod = parsear_dom_product(item)
+            if prod and prod["sku"] not in vistos:
+                vistos.add(prod["sku"])
+                encontrados.append(prod)
+        return encontrados
 
     if isinstance(obj, dict):
         nombre = first_key(obj, NAME_KEYS)
