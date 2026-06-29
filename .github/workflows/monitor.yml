@@ -5,6 +5,9 @@ on:
     - cron: '0 * * * *'  # cada 60 minutos
   workflow_dispatch:          # permite correrlo manualmente desde GitHub
 
+permissions:
+  contents: write
+
 jobs:
   monitor:
     runs-on: ubuntu-latest
