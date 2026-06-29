@@ -30,3 +30,12 @@ jobs:
           NTFY_TEMA: ${{ secrets.NTFY_TEMA }}
           URLS: ${{ secrets.URLS }}
         run: python monitor.py --once
+
+      - name: Mantener repo activo (evita que GitHub desactive el cron)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          date -u > ultimo_chequeo.txt
+          git add ultimo_chequeo.txt
+          git diff --staged --quiet || git commit -m "ultimo chequeo: $(date -u)"
+          git push
