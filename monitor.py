@@ -345,12 +345,19 @@ def evaluar(con, prod, cfg):
         return None
 
     motivos = []
+    nivel = None  # "super" o "normal"
 
     if normal and normal > 0:
         desc = 1 - precio / normal
-        if desc >= cfg.get("umbral_descuento", 0.80):
+        if desc >= cfg.get("umbral_error", 0.80):
             motivos.append(f"{desc*100:.0f}% bajo el precio normal "
                            f"(${normal:,} -> ${precio:,})".replace(",", "."))
+            nivel = "super"
+        elif desc >= cfg.get("umbral_descuento", 0.65):
+            motivos.append(f"{desc*100:.0f}% bajo el precio normal "
+                           f"(${normal:,} -> ${precio:,})".replace(",", "."))
+            if nivel is None:
+                nivel = "normal"
 
     ref = precio_referencia(con, prod["sku"], cfg.get("min_muestras", 5))
     if ref:
@@ -358,20 +365,24 @@ def evaluar(con, prod, cfg):
         if caida >= cfg.get("umbral_caida", 0.60):
             motivos.append(f"{caida*100:.0f}% bajo su precio habitual "
                            f"(~${int(ref):,} -> ${precio:,})".replace(",", "."))
+            if nivel is None:
+                nivel = "normal"
 
-    return " | ".join(motivos) if motivos else None
+    if not motivos:
+        return None
+    return nivel, " | ".join(motivos)
 
 
 # ------------------------------------------------------------------ #
 #  NTFY
 # ------------------------------------------------------------------ #
 
-def enviar_ntfy(cfg, titulo, cuerpo, url_producto=""):
+def enviar_ntfy(cfg, titulo, cuerpo, url_producto="", super_alerta=False):
     tema = cfg["ntfy_tema"]
     headers = {
         "Title":    titulo.encode("utf-8"),
-        "Priority": "high",
-        "Tags":     "rotating_light,moneybag",
+        "Priority": "max" if super_alerta else "high",
+        "Tags":     "rotating_light,rotating_light,fire,moneybag" if super_alerta else "moneybag",
     }
     if url_producto:
         headers["Click"] = url_producto
@@ -406,17 +417,21 @@ def revisar_una_vez(con, cfg):
         for prod in unicos:
             total += 1
             registrar_precio(con, prod)
-            motivo = evaluar(con, prod, cfg)
-            if motivo:
+            resultado = evaluar(con, prod, cfg)
+            if resultado:
+                nivel, motivo = resultado
                 clave = f"{prod['sku']}@{prod['precio']}"
                 if not ya_alertado(con, clave):
                     marcar_alertado(con, clave)
                     alertas += 1
-                    titulo = f"ERROR DE PRECIO: {prod['nombre'][:50]}"
-                    cuerpo  = (f"Precio: ${prod['precio']:,}\n"
-                               f"{motivo}").replace(",", ".")
-                    enviar_ntfy(cfg, titulo, cuerpo, prod.get("url", ""))
-                    print(f"  ALERTA: {prod['nombre']} -> ${prod['precio']}")
+                    if nivel == "super":
+                        titulo = f"POSIBLE ERROR DE PRECIO: {prod['nombre'][:45]}"
+                    else:
+                        titulo = f"Oferta interesante: {prod['nombre'][:50]}"
+                    cuerpo = (f"Precio: ${prod['precio']:,}\n"
+                              f"{motivo}").replace(",", ".")
+                    enviar_ntfy(cfg, titulo, cuerpo, prod.get("url", ""), super_alerta=(nivel == "super"))
+                    print(f"  ALERTA ({nivel}): {prod['nombre']} -> ${prod['precio']}")
 
         time.sleep(cfg.get("pausa_entre_urls_seg", 5))
     print(f"  Resumen: {total} productos, {alertas} alertas nuevas\n")
