@@ -190,25 +190,32 @@ def fetch_payloads(url, timeout_ms=45000, headless=True):
         except Exception:
             pass
 
-        # Plan B2: schema.org ItemList (Paris.cl y similares)
+        # Plan B2: schema.org ItemList + precio normal del DOM (Paris.cl y similares)
         try:
             schema_products = page.evaluate("""() => {
-                const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"], script:not([src])'));
+                const scripts = Array.from(document.querySelectorAll('script:not([src])'));
                 for (const s of scripts) {
                     try {
                         const data = JSON.parse(s.textContent);
                         const entity = data.mainEntity || data;
                         if (entity['@type'] === 'ItemList' && entity.itemListElement) {
-                            return entity.itemListElement
+                            const items = entity.itemListElement
                                 .map(item => item.item || item)
-                                .filter(p => p.offers && p.offers.price)
-                                .map(p => ({
+                                .filter(p => p.offers && p.offers.price);
+                            // Precio tachado (precio normal) desde el DOM
+                            const normalEls = Array.from(document.querySelectorAll('.ui-line-through'))
+                                .filter(el => el.textContent.trim().startsWith('$'));
+                            return items.map((p, i) => {
+                                const normalRaw = normalEls[i] ? normalEls[i].textContent.trim() : null;
+                                const normal = normalRaw ? parseInt(normalRaw.replace(/[^\\d]/g, '')) : p.offers.price;
+                                return {
                                     sku: p.sku || p.name,
                                     nombre: p.name,
                                     precio: p.offers.price,
-                                    normal: p.offers.price,
+                                    normal: normal,
                                     url: p.url || p.offers.url || ''
-                                }));
+                                };
+                            });
                         }
                     } catch(e) {}
                 }
