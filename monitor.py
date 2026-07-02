@@ -427,6 +427,11 @@ def main():
     con  = init_db()
     intervalo = cfg.get("intervalo_minutos", 30)
 
+    if "--test" in sys.argv:
+        enviar_ntfy(cfg, "Monitor OK", "Las notificaciones funcionan correctamente.")
+        print("Notificacion de prueba enviada.")
+        return
+
     if "--once" in sys.argv:
         revisar_una_vez(con, cfg)
         return

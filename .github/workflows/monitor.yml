@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: '8 * * * *'   # una vez por hora, al minuto 17
   workflow_dispatch:
+    inputs:
+      modo:
+        description: 'Modo de ejecucion'
+        required: false
+        default: 'once'
+        type: choice
+        options:
+          - once
+          - test
 
 concurrency:
   group: falabella-monitor
@@ -42,7 +51,7 @@ jobs:
         env:
           NTFY_TEMA: ${{ secrets.NTFY_TEMA }}
           URLS: ${{ secrets.URLS }}
-        run: python monitor.py --once
+        run: python monitor.py --${{ github.event.inputs.modo || 'once' }}
 
       - name: Mantener repo activo (evita que GitHub desactive el cron)
         run: |
