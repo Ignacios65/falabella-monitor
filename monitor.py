@@ -190,6 +190,35 @@ def fetch_payloads(url, timeout_ms=45000, headless=True):
         except Exception:
             pass
 
+        # Plan B2: schema.org ItemList (Paris.cl y similares)
+        try:
+            schema_products = page.evaluate("""() => {
+                const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"], script:not([src])'));
+                for (const s of scripts) {
+                    try {
+                        const data = JSON.parse(s.textContent);
+                        const entity = data.mainEntity || data;
+                        if (entity['@type'] === 'ItemList' && entity.itemListElement) {
+                            return entity.itemListElement
+                                .map(item => item.item || item)
+                                .filter(p => p.offers && p.offers.price)
+                                .map(p => ({
+                                    sku: p.sku || p.name,
+                                    nombre: p.name,
+                                    precio: p.offers.price,
+                                    normal: p.offers.price,
+                                    url: p.url || p.offers.url || ''
+                                }));
+                        }
+                    } catch(e) {}
+                }
+                return null;
+            }""")
+            if schema_products:
+                payloads.append({"_schema_products": schema_products})
+        except Exception:
+            pass
+
         # Plan C: extraer productos del DOM (para tiendas que renderizan en HTML)
         try:
             dom_products = page.evaluate("""() => {
@@ -299,6 +328,13 @@ def parsear_dom_product(item):
 def extraer_productos(obj, encontrados=None, vistos=None):
     if encontrados is None:
         encontrados, vistos = [], set()
+
+    if isinstance(obj, dict) and "_schema_products" in obj:
+        for item in obj["_schema_products"]:
+            if item.get("sku") and item.get("sku") not in vistos:
+                vistos.add(item["sku"])
+                encontrados.append(item)
+        return encontrados
 
     if isinstance(obj, dict) and "_dom_products" in obj:
         for item in obj["_dom_products"]:
